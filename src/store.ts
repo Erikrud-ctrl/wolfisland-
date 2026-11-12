@@ -86,7 +86,7 @@ export function defaultInput(team: TeamCfg): LastInput {
     coaches: 2,
     space: team.format === '5v5' ? 'plan5' : team.format === '7v7' ? 'kvart11' : 'halv11',
     minutes: f.defaultMinutes,
-    options: { prehab: team.age >= 10, gkMoment: true, fys: false },
+    options: { prehab: team.age >= 10, gkMoment: true, fys: team.age >= 15 },
   }
 }
 
