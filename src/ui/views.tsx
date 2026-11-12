@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { SPACES } from '../domain/alloc'
-import { DRILL_BY_ID } from '../domain/drills'
+import { findDrill } from '../domain/bank'
 import { AGES, FORMATS, FORMAT_LIST, SENIOR_AGE, ageLabel, formatForAge } from '../domain/formats'
 import { LEVEL_LABEL, buildSession, formatName, levelFor } from '../domain/planner'
 import { THEME_BY_ID, themesFor } from '../domain/themes'
@@ -306,7 +306,7 @@ export function BlockView({ store, block }: { store: Store; block: Block }) {
           <ol className="session-list">
             {block.sessions.map((s, i) => {
               const state = s.done ? 'done' : i === p.next ? 'next' : 'later'
-              const names = (['skill', 'game'] as const).map((k) => DRILL_BY_ID.get(s.session?.slots.find((x) => x.slot === k)?.drillId ?? s.plan.drills[k])?.name).filter(Boolean)
+              const names = (['skill', 'game'] as const).map((k) => findDrill(s.session?.slots.find((x) => x.slot === k)?.drillId ?? s.plan.drills[k])?.name).filter(Boolean)
               return (
                 <li key={i} className={`card session-item is-${state}`}>
                   <div className="card-head">

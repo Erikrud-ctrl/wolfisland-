@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useStore } from './store'
 import { About, Bank, DrillPreview } from './ui/bank'
 import { go, useRoute } from './ui/common'
+import { Editor } from './ui/editor'
 import { ReviewView, RunView, SessionView } from './ui/session'
 import { BlockView, Home, NewBlock, Prep, TeamSetup } from './ui/views'
 
@@ -21,7 +22,11 @@ export default function App() {
   const [a, b, c, d] = route
   if (a === 'lag') return <TeamSetup store={store} />
   if (a === 'om') return <About store={store} />
-  if (a === 'ovningar') return b ? <DrillPreview key={b} store={store} id={b} /> : <Bank store={store} />
+  if (a === 'ovningar') {
+    if (b === 'ny') return <Editor key="ny" store={store} />
+    if (b && c === 'redigera') return <Editor key={b} store={store} id={b} />
+    return b ? <DrillPreview key={b} store={store} id={b} /> : <Bank store={store} />
+  }
   if (a === 'block') {
     if (b === 'nytt') return <NewBlock store={store} />
     const block = store.state.blocks.find((x) => x.id === b)

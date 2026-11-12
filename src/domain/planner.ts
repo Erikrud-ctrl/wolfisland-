@@ -1,7 +1,7 @@
 // Planering av block och pass: väljer övningar, fördelar tid och anpassar efter dagens förutsättningar.
 
 import { buildSetup } from './build'
-import { DRILLS, DRILL_BY_ID } from './drills'
+import { activeDrills, allDrills, findDrill, isFavorite, isHidden } from './bank'
 import { hash } from './scene'
 import type { DrillDef, EquipId, Format, Phase, SessionCtx, Setup, ThemeId } from './types'
 
@@ -73,10 +73,10 @@ export const LEVEL_LABEL: Record<1 | 2 | 3, string> = {
   3: 'Matchlikt – använda det i spel',
 }
 
-function candidates(phase: Phase, theme: ThemeId, age: number): DrillDef[] {
+function candidates(phase: Phase, theme: ThemeId, age: number, pool: DrillDef[] = activeDrills()): DrillDef[] {
   // Yngre än åtta år använder de enklaste övningarna i banken.
   const a = Math.max(6, age)
-  return DRILLS.filter((d) => {
+  return pool.filter((d) => {
     if (d.phase !== phase || !ageFits(d, a)) return false
     if (phase === 'warmup') return d.themes.length === 0 || d.themes.includes(theme)
     if (phase === 'match') return d.themes.length === 0 || d.themes.includes(theme)
@@ -92,14 +92,16 @@ function rank(list: DrillDef[], level: number, used: Map<string, number>, seed: 
     const rep = (used.get(d.id) ?? 0) * 25
     // Övningar som har temat som huvudtema går före dem som bara passar in.
     const main = d.themes[0] === theme ? 0 : d.themes.includes(theme) ? 3 : 5
+    // Favoriter går först bland övningar på rätt steg, men slår inte ut en övning som passar steget bättre.
+    const fav = isFavorite(d.id) ? -8 : 0
     const rnd = (hash(seed + d.id) % 1000) / 1000
-    return lvl + rep + main + rnd
+    return lvl + rep + main + fav + rnd
   }
   return [...list].sort((a, b) => score(a) - score(b))
 }
 
-function matchCandidates(theme: ThemeId, level: number): DrillDef[] {
-  const all = DRILLS.filter((d) => d.phase === 'match')
+function matchCandidates(theme: ThemeId, level: number, pool: DrillDef[] = activeDrills()): DrillDef[] {
+  const all = pool.filter((d) => d.phase === 'match')
   if (level >= 3) return all.filter((d) => d.themes.length === 0)
   const themed = all.filter((d) => d.themes.includes(theme) && d.level === level)
   return themed.length ? themed : all.filter((d) => d.themes.length === 0)
@@ -108,7 +110,10 @@ function matchCandidates(theme: ThemeId, level: number): DrillDef[] {
 /** Välj övningar för alla pass i ett block. */
 export function planBlock(theme: ThemeId, age: number, sessions: number, seed: string): SessionPlan[] {
   const used = new Map<string, number>()
-  const take = (list: DrillDef[], level: number, key: string, avoid?: string): string => {
+  const take = (pick: (pool?: DrillDef[]) => DrillDef[], level: number, key: string, avoid?: string): string => {
+    // Har tränaren dolt allt som passar används hela banken hellre än att blocket blir tomt.
+    let list = pick()
+    if (!list.length) list = pick(allDrills())
     const ranked = rank(list, level, used, seed + key, theme)
     // Samma övning får inte förekomma två gånger i ett pass.
     const d = ranked.find((x) => x.id !== avoid) ?? ranked[0]
@@ -120,14 +125,17 @@ export function planBlock(theme: ThemeId, age: number, sessions: number, seed: s
   for (let i = 0; i < sessions; i++) {
     const level = levelFor(i, sessions)
     const key = `s${i}`
-    const warm = candidates('warmup', theme, age)
-    // Uppvärmningar som hör till temat väljs i första hand.
-    const themedWarm = warm.filter((d) => d.themes.includes(theme))
-    const warmup = take(themedWarm.length >= 2 ? themedWarm : warm, 1, key + 'w')
-    const skill = take(candidates('skill', theme, age), level, key + 'k')
-    const game = take(candidates('game', theme, age), level, key + 'g')
-    const game2 = take(candidates('game', theme, age), Math.min(3, level + 1), key + 'h', game)
-    const match = take(matchCandidates(theme, level), level, key + 'm')
+    const warm = (pool?: DrillDef[]) => {
+      const list = candidates('warmup', theme, age, pool)
+      // Uppvärmningar som hör till temat väljs i första hand.
+      const themed = list.filter((d) => d.themes.includes(theme))
+      return themed.length >= 2 ? themed : list
+    }
+    const warmup = take(warm, 1, key + 'w')
+    const skill = take((pool) => candidates('skill', theme, age, pool), level, key + 'k')
+    const game = take((pool) => candidates('game', theme, age, pool), level, key + 'g')
+    const game2 = take((pool) => candidates('game', theme, age, pool), Math.min(3, level + 1), key + 'h', game)
+    const match = take((pool) => matchCandidates(theme, level, pool), level, key + 'm')
     plans.push({ level, drills: { warmup, skill, game, game2, match } })
   }
   return plans
@@ -189,11 +197,11 @@ function feasible(d: DrillDef, ctx: SessionCtx): boolean {
 export function alternatives(session: Session, slot: SlotId, theme: ThemeId, level: number, exclude: string[], seed: string): DrillDef[] {
   const phase = SLOT_PHASE[slot]
   const ctx = slotCtx(session, slot)
-  const base = phase === 'match' ? DRILLS.filter((d) => d.phase === 'match' && (d.themes.length === 0 || d.themes.includes(theme))) : candidates(phase, theme, ctx.age)
+  const base = candidates(phase, theme, ctx.age)
   const used = new Map<string, number>(exclude.map((id) => [id, 1]))
   let pool = base.filter((d) => feasible(d, ctx))
   // Går inget i temat att genomföra (t.ex. väldigt få spelare) duger en övning från ett annat tema.
-  if (!pool.length) pool = DRILLS.filter((d) => d.phase === phase && ageFits(d, Math.max(6, ctx.age)) && feasible(d, ctx))
+  if (!pool.length) pool = activeDrills().filter((d) => d.phase === phase && ageFits(d, Math.max(6, ctx.age)) && feasible(d, ctx))
   return rank(pool, level, used, seed, theme)
 }
 
@@ -206,7 +214,7 @@ export function buildSession(plan: SessionPlan, theme: ThemeId, ctx: SessionCtx,
   const session: Session = { ctx, options: opts, slots: [], pauses }
 
   // Målvaktsmoment: kräver två målvakter, eller en målvakt och en tränare som kan serva.
-  const skillDef = DRILL_BY_ID.get(plan.drills.skill)
+  const skillDef = findDrill(plan.drills.skill)
   // Utespelarna måste dessutom räcka till färdighetsövningen när målvakterna går åt sidan.
   const gkPossible = (ctx.goalkeepers >= 2 || (ctx.goalkeepers === 1 && ctx.coaches >= 2)) && ctx.players - ctx.goalkeepers >= 6
   if (options.gkMoment && gkPossible && skillDef && !skillDef.usesGk) {
@@ -234,16 +242,17 @@ export function buildSession(plan: SessionPlan, theme: ThemeId, ctx: SessionCtx,
       drillId = list[0].id
     } else {
       drillId = plan.drills[slot]
-      const def = DRILL_BY_ID.get(drillId)
+      const def = findDrill(drillId)
       const c = slotCtx(session, slot)
-      if (!def || taken.includes(drillId) || !ageFits(def, Math.max(6, c.age)) || !feasible(def, c)) {
+      // En övning som har dolts eller tagits bort sedan blocket planerades byts ut.
+      if (!def || isHidden(drillId) || taken.includes(drillId) || !ageFits(def, Math.max(6, c.age)) || !feasible(def, c)) {
         const level = slot === 'game2' ? Math.min(3, plan.level + 1) : plan.level
         const free = (d: DrillDef) => !taken.includes(d.id)
         const alt =
           alternatives(session, slot, theme, level, taken, seed + slot).find(free) ??
           // Sista utvägen: en genomförbar övning från ett annat tema.
           rank(
-            DRILLS.filter((d) => d.phase === SLOT_PHASE[slot] && ageFits(d, Math.max(6, c.age)) && free(d) && feasible(d, c)),
+            activeDrills().filter((d) => d.phase === SLOT_PHASE[slot] && ageFits(d, Math.max(6, c.age)) && free(d) && feasible(d, c)),
             level,
             new Map(),
             seed + slot,
@@ -253,7 +262,7 @@ export function buildSession(plan: SessionPlan, theme: ThemeId, ctx: SessionCtx,
           lost += minutes
           continue
         }
-        swappedFrom = def && !taken.includes(drillId) ? drillId : undefined
+        swappedFrom = def && !taken.includes(drillId) && !isHidden(drillId) ? drillId : undefined
         drillId = alt.id
       }
     }
@@ -290,7 +299,7 @@ export interface BuiltSlot {
 export function builtSlots(session: Session): BuiltSlot[] {
   const out: BuiltSlot[] = []
   for (const slot of session.slots) {
-    const def = DRILL_BY_ID.get(slot.drillId)
+    const def = findDrill(slot.drillId)
     if (!def) continue
     const setup = buildSetup(def, slotCtx(session, slot.slot))
     if (setup) out.push({ slot, def, setup })
@@ -300,7 +309,7 @@ export function builtSlots(session: Session): BuiltSlot[] {
 
 export function builtGk(session: Session): { def: DrillDef; setup: Setup } | null {
   if (!session.gkDrillId) return null
-  const def = DRILL_BY_ID.get(session.gkDrillId)
+  const def = findDrill(session.gkDrillId)
   if (!def) return null
   const setup = buildSetup(def, session.ctx)
   return setup ? { def, setup } : null

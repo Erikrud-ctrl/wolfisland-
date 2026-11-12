@@ -1,8 +1,10 @@
 // Appens data sparas lokalt i webbläsaren på enheten.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { setBank } from './domain/bank'
 import { FORMATS } from './domain/formats'
 import { planBlock, type Session, type SessionOptions, type SessionPlan } from './domain/planner'
+import { toDrillDef, type CustomDrill } from './domain/templates'
 import type { Format, SpaceId, ThemeId } from './domain/types'
 
 export interface TeamCfg {
@@ -47,18 +49,33 @@ export interface AppState {
   team: TeamCfg | null
   blocks: Block[]
   last: LastInput | null
+  /** Tränarens egna övningar. */
+  custom: CustomDrill[]
+  /** Id på favoritmarkerade övningar. */
+  favorites: string[]
+  /** Id på övningar som aldrig ska väljas. */
+  hidden: string[]
 }
 
 const KEY = 'wik-traning-v1'
 
-const EMPTY: AppState = { v: 1, team: null, blocks: [], last: null }
+const EMPTY: AppState = { v: 1, team: null, blocks: [], last: null, custom: [], favorites: [], hidden: [] }
 
 function load(): AppState {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return EMPTY
     const parsed = JSON.parse(raw) as AppState
-    if (parsed && parsed.v === 1 && Array.isArray(parsed.blocks)) return parsed
+    // Fält som har tillkommit i senare versioner fylls i med tomma värden.
+    if (parsed && parsed.v === 1 && Array.isArray(parsed.blocks)) {
+      return {
+        ...EMPTY,
+        ...parsed,
+        custom: Array.isArray(parsed.custom) ? parsed.custom : [],
+        favorites: Array.isArray(parsed.favorites) ? parsed.favorites : [],
+        hidden: Array.isArray(parsed.hidden) ? parsed.hidden : [],
+      }
+    }
   } catch {
     // Trasig eller otillgänglig lagring: börja om från tomt läge.
   }
@@ -110,6 +127,10 @@ export interface Store {
   updateSession: (blockId: string, index: number, session: Session) => void
   clearSession: (blockId: string, index: number) => void
   finishSession: (blockId: string, index: number, review: Review) => void
+  toggleFavorite: (id: string) => void
+  toggleHidden: (id: string) => void
+  saveCustom: (drill: CustomDrill) => void
+  deleteCustom: (id: string) => void
   reset: () => void
 }
 
@@ -120,6 +141,9 @@ export function useStore(): Store {
   useEffect(() => {
     setSaveFailed(!save(state))
   }, [state])
+
+  // Banken måste vara uppdaterad innan skärmarna ritas, därför här och inte i en effekt.
+  useMemo(() => setBank(state.custom.map(toDrillDef), state.favorites, state.hidden), [state.custom, state.favorites, state.hidden])
 
   const mapSession = useCallback((blockId: string, index: number, fn: (s: StoredSession) => StoredSession, extra?: (s: AppState) => Partial<AppState>) => {
     setState((prev) => ({
@@ -153,6 +177,41 @@ export function useStore(): Store {
     updateSession: (blockId, index, session) => mapSession(blockId, index, (s) => ({ ...s, session })),
     clearSession: (blockId, index) => mapSession(blockId, index, (s) => ({ plan: s.plan })),
     finishSession: (blockId, index, review) => mapSession(blockId, index, (s) => ({ ...s, done: review })),
+    toggleFavorite: (id) =>
+      setState((p) => ({
+        ...p,
+        favorites: p.favorites.includes(id) ? p.favorites.filter((x) => x !== id) : [...p.favorites, id],
+        // En favorit kan inte samtidigt vara dold.
+        hidden: p.hidden.filter((x) => x !== id),
+      })),
+    toggleHidden: (id) =>
+      setState((p) => ({
+        ...p,
+        hidden: p.hidden.includes(id) ? p.hidden.filter((x) => x !== id) : [...p.hidden, id],
+        favorites: p.favorites.filter((x) => x !== id),
+      })),
+    saveCustom: (drill) =>
+      setState((p) => {
+        const exists = p.custom.some((c) => c.id === drill.id)
+        return {
+          ...p,
+          custom: exists ? p.custom.map((c) => (c.id === drill.id ? drill : c)) : [drill, ...p.custom],
+          // Nya egna övningar blir favoriter så att de väljs i första hand.
+          favorites: exists || p.favorites.includes(drill.id) ? p.favorites : [...p.favorites, drill.id],
+        }
+      }),
+    deleteCustom: (id) =>
+      setState((p) => ({
+        ...p,
+        custom: p.custom.filter((c) => c.id !== id),
+        favorites: p.favorites.filter((x) => x !== id),
+        hidden: p.hidden.filter((x) => x !== id),
+        // Pass som inte är genomförda och använder övningen byggs om nästa gång de öppnas.
+        blocks: p.blocks.map((b) => ({
+          ...b,
+          sessions: b.sessions.map((s) => (!s.done && s.session?.slots.some((x) => x.drillId === id) ? { plan: s.plan } : s)),
+        })),
+      })),
     reset: () => setState(EMPTY),
   }
 }

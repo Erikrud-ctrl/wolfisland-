@@ -11,7 +11,7 @@ export function DrillView({ def, setup, minutes, age, showGk }: { def: DrillDef;
     <div className="drill">
       {/* Ny nyckel när uppställningen ändras, så att animationen börjar om från start. */}
       <Pitch key={`${def.id}|${setup.summary}`} scene={setup.scene} />
-      <p className="drill-purpose">{def.purpose}</p>
+      {def.purpose && <p className="drill-purpose">{def.purpose}</p>}
 
       <dl className="facts">
         <div>
@@ -62,23 +62,33 @@ export function DrillView({ def, setup, minutes, age, showGk }: { def: DrillDef;
         ))}
       </ol>
 
-      <h4>Coacha på</h4>
-      <ul className="coaching">
-        {def.coaching.map((c, i) => (
-          <li key={i}>{c}</li>
-        ))}
-      </ul>
+      {def.coaching.length > 0 && (
+        <>
+          <h4>Coacha på</h4>
+          <ul className="coaching">
+            {def.coaching.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+        </>
+      )}
 
-      <div className="levels">
-        <p>
-          <b>Lättare</b>
-          {fill(def.easier, setup)}
-        </p>
-        <p>
-          <b>Svårare</b>
-          {fill(def.harder, setup)}
-        </p>
-      </div>
+      {(def.easier || def.harder) && (
+        <div className="levels">
+          {def.easier && (
+            <p>
+              <b>Lättare</b>
+              {fill(def.easier, setup)}
+            </p>
+          )}
+          {def.harder && (
+            <p>
+              <b>Svårare</b>
+              {fill(def.harder, setup)}
+            </p>
+          )}
+        </div>
+      )}
 
       {showGk && def.gkFocus && (
         <p className="gk-focus">

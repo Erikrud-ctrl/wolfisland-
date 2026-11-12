@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { buildSetup } from '../domain/build'
-import { DRILLS, DRILL_BY_ID } from '../domain/drills'
+import { allDrills, findDrill } from '../domain/bank'
 import { FORMATS, ageLabel } from '../domain/formats'
 import { ageFits, formatName } from '../domain/planner'
 import { THEME_BY_ID, themesFor } from '../domain/themes'
@@ -23,23 +23,56 @@ const PHASE_LABEL: Record<Phase, string> = {
 }
 const PHASES: Phase[] = ['warmup', 'skill', 'game', 'match', 'gk', 'prehab', 'fys']
 
+type Show = 'alla' | 'favoriter' | 'egna' | 'dolda'
+
+function Star({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={`star${on ? ' is-on' : ''}`}>
+      <path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.3 1.1 6.1L12 17.1 6.6 20l1.1-6.1L3.2 9.6l6.1-.8z" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function Bank({ store }: { store: Store }) {
   const team = store.state.team as TeamCfg
   const [theme, setTheme] = useState<ThemeId | 'alla'>('alla')
   const [phase, setPhase] = useState<Phase | 'alla'>('alla')
+  const [show, setShow] = useState<Show>('alla')
   const themes = themesFor(team.format)
   const age = Math.max(6, team.age)
-  const list = useMemo(
-    () =>
-      DRILLS.filter((d) => ageFits(d, age))
-        .filter((d) => phase === 'alla' || d.phase === phase)
-        .filter((d) => theme === 'alla' || d.themes.includes(theme) || (d.themes.length === 0 && (d.phase === 'warmup' || d.phase === 'match'))),
-    [age, phase, theme],
-  )
+  const { custom, favorites, hidden } = store.state
+  const list = useMemo(() => {
+    const fav = new Set(favorites)
+    const hid = new Set(hidden)
+    const own = new Set(custom.map((c) => c.id))
+    return allDrills()
+      // Favoriter, egna och dolda visas oavsett ålder, så att de alltid går att hitta och ändra.
+      .filter((d) => show !== 'alla' || ageFits(d, age) || own.has(d.id))
+      .filter((d) => phase === 'alla' || d.phase === phase)
+      .filter((d) => theme === 'alla' || d.themes.includes(theme) || (d.themes.length === 0 && (d.phase === 'warmup' || d.phase === 'match')))
+      .filter((d) => (show === 'favoriter' ? fav.has(d.id) : show === 'egna' ? own.has(d.id) : show === 'dolda' ? hid.has(d.id) : true))
+      .map((d) => ({ d, fav: fav.has(d.id), hid: hid.has(d.id), own: own.has(d.id) }))
+  }, [age, phase, theme, show, custom, favorites, hidden])
+  const empty: Record<Show, string> = {
+    alla: 'Inga övningar matchar filtret.',
+    favoriter: 'Inga favoriter än. Öppna en övning och tryck på stjärnan.',
+    egna: 'Inga egna övningar än.',
+    dolda: 'Inga dolda övningar.',
+  }
   return (
     <>
       <TopBar title="Övningsbanken" sub={`${list.length} övningar för ${teamLine(team)}`} backTo="" />
       <main>
+        <button type="button" className="btn btn-primary" onClick={() => go('ovningar/ny')}>
+          Ny egen övning
+        </button>
+        <div className="seg seg-small" role="radiogroup" aria-label="Visa">
+          {(['alla', 'favoriter', 'egna', 'dolda'] as Show[]).map((v) => (
+            <button key={v} type="button" role="radio" aria-checked={show === v} className={show === v ? 'is-on' : ''} onClick={() => setShow(v)}>
+              {v === 'alla' ? 'Alla' : v === 'favoriter' ? 'Favoriter' : v === 'egna' ? 'Egna' : 'Dolda'}
+            </button>
+          ))}
+        </div>
         <div className="filters">
           <label>
             <span>Tema</span>
@@ -65,12 +98,17 @@ export function Bank({ store }: { store: Store }) {
           </label>
         </div>
         <ul className="bank-list">
-          {list.map((d) => (
+          {list.map(({ d, fav, hid, own }) => (
             <li key={d.id}>
-              <button type="button" className="card nav-card" onClick={() => go(`ovningar/${d.id}`)}>
+              <button type="button" className={`card nav-card${hid ? ' is-hidden' : ''}`} onClick={() => go(`ovningar/${d.id}`)}>
                 <span>
-                  <b>{d.name}</b>
+                  <b>
+                    {fav && <Star on />}
+                    {d.name}
+                  </b>
                   <small>
+                    {own ? 'Egen · ' : ''}
+                    {hid ? 'Dold · ' : ''}
                     {PHASE_LABEL[d.phase]}
                     {d.themes[0] ? ` · ${THEME_BY_ID[d.themes[0]].name}` : ''} · steg {d.level}
                   </small>
@@ -82,18 +120,37 @@ export function Bank({ store }: { store: Store }) {
             </li>
           ))}
         </ul>
-        {list.length === 0 && <p className="muted center">Inga övningar matchar filtret.</p>}
+        {list.length === 0 && <p className="muted center">{empty[show]}</p>}
       </main>
     </>
   )
 }
 
+export function DrillActions({ store, id }: { store: Store; id: string }) {
+  const fav = store.state.favorites.includes(id)
+  const hid = store.state.hidden.includes(id)
+  return (
+    <div className="row drill-actions">
+      <button type="button" className={`btn btn-ghost${fav ? ' is-fav' : ''}`} aria-pressed={fav} onClick={() => store.toggleFavorite(id)}>
+        <Star on={fav} />
+        {fav ? 'Favorit' : 'Gör till favorit'}
+      </button>
+      <button type="button" className="btn btn-ghost" aria-pressed={hid} onClick={() => store.toggleHidden(id)}>
+        {hid ? 'Visa igen' : 'Dölj övningen'}
+      </button>
+    </div>
+  )
+}
+
 export function DrillPreview({ store, id }: { store: Store; id: string }) {
   const team = store.state.team as TeamCfg
-  const def = DRILL_BY_ID.get(id)
+  const def = findDrill(id)
+  const own = store.state.custom.some((c) => c.id === id)
+  const hid = store.state.hidden.includes(id)
   const base = store.state.last ?? defaultInput(team)
   const [players, setPlayers] = useState(base.players)
   const [gks, setGks] = useState(base.goalkeepers)
+  const [confirm, setConfirm] = useState(false)
   if (!def) {
     return (
       <>
@@ -112,6 +169,7 @@ export function DrillPreview({ store, id }: { store: Store; id: string }) {
       <TopBar title={def.name} sub={`${PHASE_LABEL[def.phase]} · ${ageLabel(def.age[0])}–${ageLabel(def.age[1]).toLowerCase()}`} backTo="ovningar" />
       <main>
         <div className="pills">
+          {own && <Pill tone="yellow">Egen övning</Pill>}
           {def.themes.map((t) => (
             <Pill key={t} tone="green">
               {THEME_BY_ID[t].name}
@@ -119,6 +177,10 @@ export function DrillPreview({ store, id }: { store: Store; id: string }) {
           ))}
           <Pill tone="muted">Steg {def.level}</Pill>
         </div>
+        <DrillActions store={store} id={id} />
+        <p className="hint">
+          {hid ? 'Dold: övningen väljs aldrig till nya pass eller vid byte av övning.' : 'Favoriter väljs i första hand när de passar passets steg. Dolda övningar väljs aldrig.'}
+        </p>
         <div className="card form-card">
           <Stepper label="Prova med antal spelare" value={players} min={2} max={40} onChange={setPlayers} />
           <Stepper label="Varav målvakter" value={ctx.goalkeepers} min={0} max={Math.min(4, Math.max(0, players - 2))} onChange={setGks} />
@@ -129,6 +191,37 @@ export function DrillPreview({ store, id }: { store: Store; id: string }) {
           </div>
         ) : (
           <p className="warn">Övningen går inte att genomföra med {players} spelare. Appen väljer då automatiskt en annan övning i passet.</p>
+        )}
+        {own && (
+          <div className="actions">
+            <button type="button" className="btn btn-ghost" onClick={() => go(`ovningar/${id}/redigera`)}>
+              Redigera övningen
+            </button>
+            {confirm ? (
+              <div className="confirm">
+                <p>Ta bort övningen? Pass som inte är genomförda och använder den byggs om.</p>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      store.deleteCustom(id)
+                      go('ovningar', true)
+                    }}
+                  >
+                    Ta bort
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={() => setConfirm(false)}>
+                    Avbryt
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="link link-danger" onClick={() => setConfirm(true)}>
+                Ta bort övningen
+              </button>
+            )}
+          </div>
         )}
       </main>
     </>
@@ -218,6 +311,7 @@ export function About({ store }: { store: Store }) {
               <li>Måtten räknas om efter antal spelare så att ytan per spelare behålls, och krymps om ni har ont om plats.</li>
               <li>Antalet tränare styr hur många ytor som körs samtidigt.</li>
               <li>Saknas målvakt byts stora mål mot småmål, med en målvakt spelas det mot ett stort mål och två små.</li>
+              <li>Favoritmarkerade och egna övningar väljs i första hand när de passar passets steg. Dolda övningar väljs aldrig.</li>
               <li>Minst hälften av passet är spelövningar och matchspel, och varje pass följer ett tema.</li>
             </ul>
           </div>

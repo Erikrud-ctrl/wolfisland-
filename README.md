@@ -9,6 +9,8 @@ Träningsplanering för Wargöns IK. En webbapp för mobilen som bygger träning
 - **Inför passet.** Fyll i antal spelare, målvakter, tränare, yta och tid. Lagindelning, antal ytor, mått, material och tider räknas om.
 - **Passet.** Uppvärmning → färdighetsövning → spelövning → matchspel, alltid med temat som röd tråd. Varje övning har en animerad planskiss, instruktioner och coachingpunkter. Enskilda övningar kan bytas ut.
 - **Extra moment.** Skadeförebyggande uppvärmning (från 10 år), målvaktsmoment parallellt med färdighetsövningen och fys utan boll (från 15 år).
+- **Favoriter och dolda övningar.** Favoriter väljs i första hand när de passar passets steg. Dolda övningar väljs aldrig.
+- **Egna övningar.** Välj en mall (smålagsspel, bollinnehav, rondo, duell, avslut m.fl.), ställ in upplägget och skriv egna instruktioner. Övningen får animerad skiss och skalas som de inbyggda.
 - **Vid planen.** Tidtagning per moment med ljudsignal, och en kort utvärdering efter passet som sparas i blockets historik.
 
 Allt sparas lokalt på enheten. Appen fungerar utan täckning när den har öppnats en gång och kan läggas på hemskärmen.
@@ -31,6 +33,8 @@ npm run build     # bygger till dist/
 | `src/domain/alloc.ts` | Fördelning av spelare på ytor, lag och jokrar |
 | `src/domain/builders*.ts` | Byggare som gör en övningsmall till lagindelning, mått och skiss |
 | `src/domain/drills/` | Övningsbanken, en fil per tema |
+| `src/domain/bank.ts` | Den aktiva banken: inbyggda och egna övningar, favoriter och dolda |
+| `src/domain/templates.ts` | Mallarna som egna övningar byggs från |
 | `src/domain/planner.ts` | Blockplanering, tidsfördelning, byte av övning, materiallista |
 | `src/ui/` | Skärmarna och den animerade planskissen |
 

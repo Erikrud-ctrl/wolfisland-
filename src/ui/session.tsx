@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { SPACES } from '../domain/alloc'
 import { LEVEL_LABEL, SLOT_LABEL, builtGk, builtSlots, equipmentList, swapSlot, type Session } from '../domain/planner'
 import { THEME_BY_ID } from '../domain/themes'
-import { DRILL_BY_ID } from '../domain/drills'
+import { findDrill } from '../domain/bank'
 import type { Block, Store } from '../store'
 import { Pill, Section, TopBar, fmtClock, go } from './common'
 import { DrillView } from './DrillView'
@@ -69,7 +69,7 @@ export function SessionView({ store, block, index }: { store: Store; block: Bloc
             {built.map((b, i) => {
               const from = starts[i]
               const isOpen = open === i
-              const swappedName = b.slot.swappedFrom ? DRILL_BY_ID.get(b.slot.swappedFrom)?.name : null
+              const swappedName = b.slot.swappedFrom ? findDrill(b.slot.swappedFrom)?.name : null
               return (
                 <li key={b.slot.slot} className={`card slot${isOpen ? ' is-open' : ''}`}>
                   <button type="button" className="slot-head" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : i)}>
@@ -93,9 +93,25 @@ export function SessionView({ store, block, index }: { store: Store; block: Bloc
                     <div className="slot-body">
                       <DrillView def={b.def} setup={b.setup} minutes={b.slot.minutes} age={session.ctx.age} showGk={session.ctx.goalkeepers > 0} />
                       {!stored.done && b.slot.slot !== 'prehab' && (
-                        <button type="button" className="btn btn-ghost" onClick={() => swap(i)}>
-                          Byt övning
-                        </button>
+                        <div className="row">
+                          <button type="button" className="btn btn-ghost" onClick={() => swap(i)}>
+                            Byt övning
+                          </button>
+                          <button type="button" className={`btn btn-ghost${store.state.favorites.includes(b.def.id) ? ' is-fav' : ''}`} aria-pressed={store.state.favorites.includes(b.def.id)} onClick={() => store.toggleFavorite(b.def.id)}>
+                            {store.state.favorites.includes(b.def.id) ? '★ Favorit' : '☆ Favorit'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => {
+                              // Dölj övningen för framtiden och byt direkt till nästa alternativ.
+                              swap(i)
+                              store.toggleHidden(b.def.id)
+                            }}
+                          >
+                            Dölj och byt
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -307,12 +323,16 @@ export function RunView({ block, index }: { block: Block; index: number }) {
               ))}
             </ul>
           )}
-          <h4>Coacha på</h4>
-          <ul className="coaching">
-            {cur.def.coaching.map((c, k) => (
-              <li key={k}>{c}</li>
-            ))}
-          </ul>
+          {cur.def.coaching.length > 0 && (
+            <>
+              <h4>Coacha på</h4>
+              <ul className="coaching">
+                {cur.def.coaching.map((c, k) => (
+                  <li key={k}>{c}</li>
+                ))}
+              </ul>
+            </>
+          )}
           {cur.slot.slot === 'skill' && gk && (
             <p className="gk-focus">
               <b>Målvakterna samtidigt</b>
