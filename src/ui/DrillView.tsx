@@ -9,7 +9,8 @@ export function DrillView({ def, setup, minutes, age, showGk }: { def: DrillDef;
   const equip = (Object.entries(setup.equipment) as [EquipId, number][]).map(([k, v]) => `${v} ${EQUIP_LABEL[k].toLowerCase()}`)
   return (
     <div className="drill">
-      <Pitch scene={setup.scene} />
+      {/* Ny nyckel när uppställningen ändras, så att animationen börjar om från start. */}
+      <Pitch key={`${def.id}|${setup.summary}`} scene={setup.scene} />
       <p className="drill-purpose">{def.purpose}</p>
 
       <dl className="facts">

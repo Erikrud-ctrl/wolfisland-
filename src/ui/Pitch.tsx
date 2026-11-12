@@ -1,6 +1,6 @@
 // Ritad och animerad planskiss.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { Item, MoveKind, Scene, Team } from '../domain/types'
 
 interface Pt {
@@ -127,10 +127,6 @@ export function Pitch({ scene, autoPlay = true }: { scene: Scene; autoPlay?: boo
   const sw = r * 0.2
 
   useEffect(() => {
-    setPlaying(autoPlay && !reduced && hasAnim)
-  }, [scene, autoPlay, reduced, hasAnim])
-
-  useEffect(() => {
     const el = wrap.current
     if (!el || typeof IntersectionObserver === 'undefined') return
     const io = new IntersectionObserver((entries) => setVisible(entries[0]?.isIntersecting ?? true), { threshold: 0.15 })
@@ -185,7 +181,7 @@ export function Pitch({ scene, autoPlay = true }: { scene: Scene; autoPlay?: boo
 
   const vbW = scene.w + pad * 2
   const vbH = scene.h + pad * 2
-  const uid = useMemo(() => 'm' + Math.random().toString(36).slice(2, 8), [])
+  const uid = 'm' + useId().replace(/[^a-zA-Z0-9]/g, '')
   const stripes = Math.max(4, Math.round(vbW / (r * 7)))
   const moving = useMemo(() => new Set(tl.steps.flatMap((s) => s.moves.map((m) => m.id))), [tl])
   // Rita i ordning: mål och koner underst, sedan spelare, bollar överst.

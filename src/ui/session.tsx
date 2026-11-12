@@ -27,7 +27,8 @@ export function SessionView({ store, block, index }: { store: Store; block: Bloc
   const gk = useMemo(() => builtGk(session), [session])
   const equip = useMemo(() => equipmentList(session), [session])
   const [open, setOpen] = useState<number | 'gk' | null>(null)
-  let clock = 0
+  // Starttid för varje moment räknat från passets början.
+  const starts = built.map((_, i) => built.slice(0, i).reduce((sum, b) => sum + b.slot.minutes, 0))
 
   const swap = (i: number) => {
     const slot = session.slots[i]
@@ -66,8 +67,7 @@ export function SessionView({ store, block, index }: { store: Store; block: Bloc
         <Section title="Passet" aside={<span className="muted">{session.pauses} min för samlingar och vätska</span>}>
           <ol className="slots">
             {built.map((b, i) => {
-              const from = clock
-              clock += b.slot.minutes
+              const from = starts[i]
               const isOpen = open === i
               const swappedName = b.slot.swappedFrom ? DRILL_BY_ID.get(b.slot.swappedFrom)?.name : null
               return (
