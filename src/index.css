@@ -11,17 +11,20 @@
   --border: #dbe3dc;
   --danger: #b3261e;
   --on-green: #ffffff;
+  --gk-bg: #fde3ee;
+  --gk-fg: #b0125a;
   --shadow: 0 1px 2px rgba(20, 32, 26, 0.06), 0 4px 14px rgba(20, 32, 26, 0.05);
   --radius: 16px;
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 17px;
   line-height: 1.45;
   -webkit-text-size-adjust: 100%;
 }
 
+/* Mörkt läge: följer systemet, men ett uttryckligt val via data-theme vinner åt båda håll. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --green: #2fae72;
     --green-dark: #23935f;
     --green-soft: #173427;
@@ -34,8 +37,30 @@
     --border: #2a362f;
     --danger: #ff8a80;
     --on-green: #06140d;
+    --gk-bg: #4a1730;
+    --gk-fg: #ff9cc8;
     --shadow: none;
+    color-scheme: dark;
   }
+}
+
+:root[data-theme='dark'] {
+  --green: #2fae72;
+  --green-dark: #23935f;
+  --green-soft: #173427;
+  --yellow: #f5c400;
+  --yellow-soft: #3a3210;
+  --bg: #0e1411;
+  --card: #17201b;
+  --text: #e8efea;
+  --muted: #9baba2;
+  --border: #2a362f;
+  --danger: #ff8a80;
+  --on-green: #06140d;
+  --gk-bg: #4a1730;
+  --gk-fg: #ff9cc8;
+  --shadow: none;
+  color-scheme: dark;
 }
 
 * {
@@ -895,8 +920,8 @@ main.has-footer {
 }
 
 .slot-time.gk {
-  background: #fde3ee;
-  color: #b0125a;
+  background: var(--gk-bg);
+  color: var(--gk-fg);
 }
 
 .slot-main {

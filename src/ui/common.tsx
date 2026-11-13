@@ -1,30 +1,56 @@
 import { useEffect, useState, type ReactNode } from 'react'
 
-// ---------- Enkel hash-router så att telefonens bakåtknapp fungerar ----------
+// ---------- Enkel router ----------
+// Adressens hash används så att telefonens bakåtknapp fungerar, men sidan hålls också i minnet
+// så att appen fungerar även där värdsidan inte släpper igenom hash-ändringar.
+
+const readHash = () => {
+  try {
+    return window.location.hash.replace(/^#\/?/, '')
+  } catch {
+    return ''
+  }
+}
+
+let current = readHash()
+const listeners = new Set<() => void>()
+
+function setCurrent(path: string): void {
+  if (path === current) return
+  current = path
+  listeners.forEach((fn) => fn())
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', () => setCurrent(readHash()))
+}
 
 export function useRoute(): string[] {
-  const read = () => window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean)
-  const [parts, setParts] = useState<string[]>(read)
+  const [path, setPath] = useState(current)
   useEffect(() => {
     const on = () => {
-      setParts(read())
+      setPath(current)
       window.scrollTo(0, 0)
     }
-    window.addEventListener('hashchange', on)
-    return () => window.removeEventListener('hashchange', on)
+    listeners.add(on)
+    // Fånga upp en ändring som hann ske mellan första ritningen och att lyssnaren kopplades in.
+    on()
+    return () => {
+      listeners.delete(on)
+    }
   }, [])
-  return parts
+  return path.split('/').filter(Boolean)
 }
 
 export function go(path: string, replace = false): void {
-  const target = '#/' + path.replace(/^\//, '')
-  if (replace) window.location.replace(target)
-  else window.location.hash = target
-}
-
-export function back(fallback = ''): void {
-  if (window.history.length > 1) window.history.back()
-  else go(fallback)
+  const clean = path.replace(/^\//, '')
+  try {
+    if (replace) window.location.replace('#/' + clean)
+    else window.location.hash = '#/' + clean
+  } catch {
+    // Hash kan vara spärrad i inbäddat läge – sidan byts ändå nedan.
+  }
+  setCurrent(clean)
 }
 
 // ---------- Byggstenar ----------
